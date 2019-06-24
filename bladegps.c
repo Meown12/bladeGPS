@@ -203,6 +203,8 @@ int main(int argc, char *argv[])
 	datetime_t t0;
 
 	int txvga1 = TX_VGA1;
+	int txvga2 = TX_VGA2;
+	int txgain = TX_GAIN;
 
 	if (argc<3)
 	{
@@ -228,7 +230,7 @@ int main(int argc, char *argv[])
 	s.opt.iono_enable = TRUE;
 	s.opt.path_loss_enable = TRUE;
 
-	while ((result=getopt(argc,argv,"e:y:u:g:l:T:t:d:x:a:iIp"))!=-1)
+	while ((result=getopt(argc,argv,"e:y:u:g:l:T:t:d:x:a:b:iIp"))!=-1)
 	{
 		switch (result)
 		{
@@ -279,6 +281,26 @@ int main(int argc, char *argv[])
 				break;
 			}
 		case 't':
+
+			if (strncmp(optarg, "now", 3)==0)
+			{
+				time_t timer;
+				struct tm *gmt;
+				
+				time(&timer);
+				gmt = gmtime(&timer);
+
+				t0.y = gmt->tm_year+1900;
+				t0.m = gmt->tm_mon+1;
+				t0.d = gmt->tm_mday;
+				t0.hh = gmt->tm_hour;
+				t0.mm = gmt->tm_min;
+				t0.sec = (double)gmt->tm_sec;
+
+				date2gps(&t0, &s.opt.g0);
+
+				break;
+			}
 			sscanf(optarg, "%d/%d/%d,%d:%d:%lf", &t0.y, &t0.m, &t0.d, &t0.hh, &t0.mm, &t0.sec);
 			if (t0.y<=1980 || t0.m<1 || t0.m>12 || t0.d<1 || t0.d>31 ||
 				t0.hh<0 || t0.hh>23 || t0.mm<0 || t0.mm>59 || t0.sec<0.0 || t0.sec>=60.0)
@@ -311,6 +333,29 @@ int main(int argc, char *argv[])
 			else if (txvga1>BLADERF_TXVGA1_GAIN_MAX)
 				txvga1 = BLADERF_TXVGA1_GAIN_MAX;
 			break;
+		case 'b':
+			txgain =atoi(optarg);
+			int minGain = BLADERF_TXVGA1_GAIN_MIN + BLADERF_TXVGA2_GAIN_MIN + BLADERF1_TX_GAIN_OFFSET;
+			int maxGain = BLADERF_TXVGA1_GAIN_MAX + BLADERF_TXVGA2_GAIN_MAX + BLADERF1_TX_GAIN_OFFSET;
+			if (txgain < minGain){
+				txgain = minGain;
+			}
+			if (txgain > maxGain){
+				txgain = maxGain;
+			}
+
+			// split the gain value in vga1 and vga2
+			txgain = txgain - (BLADERF1_TX_GAIN_OFFSET);
+			txvga1 = BLADERF_TXVGA1_GAIN_MAX;
+			txvga2 = BLADERF_TXVGA2_GAIN_MIN;
+			if (txgain <= txvga1){
+				txvga1 = txgain;
+			}
+			else{
+				txvga2 = txgain - BLADERF_TXVGA1_GAIN_MAX;//double minus -> txgain is now based on 0 and therefore is perfect for the second gain value 
+			}
+			break;
+
 		case 'i':
 			s.opt.interactive = TRUE;
 			break;
@@ -448,13 +493,14 @@ int main(int argc, char *argv[])
 		printf("TX VGA1 gain: %d dB\n", txvga1);
 	}
 
-	s.status = bladerf_set_txvga2(s.tx.dev, TX_VGA2);
+	//s.status = bladerf_set_txvga2(s.tx.dev, TX_VGA2);
+	s.status = bladerf_set_txvga2(s.tx.dev, txvga2);
 	if (s.status != 0) {
 		fprintf(stderr, "Failed to set TX VGA2 gain: %s\n", bladerf_strerror(s.status));
 		goto out;
 	}
 	else {
-		printf("TX VGA2 gain: %d dB\n", TX_VGA2);
+		printf("TX VGA2 gain: %d dB\n", txvga2);
 	}
 
 	// Start GPS task.

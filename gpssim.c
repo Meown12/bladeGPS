@@ -1038,7 +1038,7 @@ int readAlmanac(almanac_t alm[MAX_SAT], const char *fname)
 			if (NULL == fgets(str, MAX_CHAR, fp))
 				break;
 
-			alm[sv].toa.week = atoi(str + 26) + 1024; // GPS week rollover
+			alm[sv].toa.week = atoi(str + 26) + 2048; // GPS week rollover
 
 			// Valid almanac
 			alm[sv].id = sv + 1;
@@ -2162,12 +2162,13 @@ void *gps_task(void *arg)
 		}
 	}
 
+	printf("%d\n", neph);
 	for (sv=0; sv<MAX_SAT; sv++)
 	{
-		if (eph[neph-1][sv].vflg == 1)
+		if (eph[neph][sv].vflg == 1)
 		{
-			gmax = eph[neph-1][sv].toc;
-			tmax = eph[neph-1][sv].t;
+			gmax = eph[neph][sv].toc;
+			tmax = eph[neph][sv].t;
 			break;
 		}
 	}
@@ -2209,7 +2210,7 @@ void *gps_task(void *arg)
 		}
 		else
 		{
-			if (subGpsTime(g0, gmin)<0.0 || subGpsTime(gmax, g0)<0.0)
+			if (subGpsTime(g0, gmin)<-61.0*SECONDS_IN_HOUR || subGpsTime(gmax, g0)<0.0)
 			{
 				printf("ERROR: Invalid start time.\n");
 				printf("tmin = %4d/%02d/%02d,%02d:%02d:%02.0f (%d:%.0f)\n", 
@@ -2243,16 +2244,18 @@ void *gps_task(void *arg)
 			if (eph[i][sv].vflg == 1)
 			{
 				dt = subGpsTime(g0, eph[i][sv].toc);
-				if (dt>=-SECONDS_IN_HOUR && dt<SECONDS_IN_HOUR)
+				if (dt>=61*-SECONDS_IN_HOUR && dt<61*SECONDS_IN_HOUR)
 				{
-					ieph = i;
-					break;
+					if (fabs(dt) < fabs(subGpsTime(g0, eph[ieph][sv].toc))){
+						ieph = i;
+					}
+					
 				}
 			}
 		}
 
-		if (ieph>=0) // ieph has been set
-			break;
+	//	if (ieph>=0) // ieph has been set
+	//q		break;
 	}
 
 	if (ieph == -1)
@@ -2291,6 +2294,8 @@ void *gps_task(void *arg)
 				if (dt<(-4.0*SECONDS_IN_WEEK) || dt>(4.0*SECONDS_IN_WEEK))
 				{
 					printf("ERROR: Invalid time of almanac.\n");
+					printf("%ld",alm[sv].toa.week);
+					printf("%ld",g0.week);
 					goto exit;
 				}
 			}
